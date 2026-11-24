@@ -8,6 +8,7 @@ from src.constants.enums import Decision, Role, RunStatus
 from src.domain.analysis import analyze
 from src.models.base import utc_now
 from src.models.workflow import AnalysisRun, AuditEvent, Observation, Review
+from src.services.corrections import current_snapshot
 from src.services.errors import BusinessError
 from src.services.validation import validated
 
@@ -19,11 +20,15 @@ def create_run(db, request, actor):
     sample_ids = list(db.scalars(select(Observation.id).order_by(Observation.id)))
     if not sample_ids:
         raise BusinessError('请先导入观测记录')
+    # 排队时刻冻结观测与更正：排队后才到的更正留给下次分析，本次重跑仍用这批读数
+    snapshot = current_snapshot(db)
     item = AnalysisRun(title=request.title, owner=actor, parameters=parameters, observation_ids=sample_ids,
-                       last_observation_id=sample_ids[-1], sample_size=len(sample_ids))
+                       last_observation_id=sample_ids[-1], sample_size=len(sample_ids),
+                       correction_snapshot=snapshot)
     db.add(item)
     db.flush()
-    db.add(AuditEvent(actor=actor, action='run.created', detail=f'分析 #{item.id}，固化 {item.sample_size} 条观测'))
+    db.add(AuditEvent(actor=actor, action='run.created',
+                      detail=f'分析 #{item.id}，固化 {item.sample_size} 条观测、{len(snapshot)} 条更正'))
     return item
 
 
@@ -64,7 +69,7 @@ def run_pending(db):
     try:
         sample = list(db.scalars(select(Observation.payload).where(Observation.id.in_(item.observation_ids))
                                  .order_by(Observation.id)))
-        result = analyze(sample, item.parameters)
+        result = analyze(sample, item.parameters, item.correction_snapshot or [])
         if not {'headline', 'summary', 'metrics', 'columns', 'rows'} <= set(result):
             raise RuntimeError('invalid result schema')
         json.dumps(result, allow_nan=False, ensure_ascii=False)

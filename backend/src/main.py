@@ -11,8 +11,8 @@ from src.config.project import SPEC
 from src.config.runtime import SEED_DEMO
 from src.middlewares.headers import response_headers
 from src.middlewares.trace import trace_request
-from src.models.base import Base, Session, engine
-from src.routes import analysis, records, reports, session
+from src.models.base import Base, Session, engine, ensure_schema
+from src.routes import analysis, corrections, records, reports, session
 from src.services.broker import redis
 from src.services.errors import BusinessError
 
@@ -22,6 +22,7 @@ logger = logging.getLogger('uvicorn.error')
 @asynccontextmanager
 async def lifespan(_app):
     Base.metadata.create_all(engine)
+    ensure_schema()
     if SEED_DEMO:
         try:
             logger.info('demo row counts %s', seed_data())
@@ -33,7 +34,7 @@ async def lifespan(_app):
 app = FastAPI(title=SPEC['title'], lifespan=lifespan)
 app.middleware('http')(trace_request)
 app.middleware('http')(response_headers)
-for module in (session, records, analysis, reports):
+for module in (session, records, corrections, analysis, reports):
     app.include_router(module.router)
 
 

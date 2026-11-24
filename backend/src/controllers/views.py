@@ -9,7 +9,9 @@ def review_view(item):
 def run_view(item, review=None, *, include_result=False):
     view = {'id': item.id, 'title': item.title, 'owner': item.owner, 'status': item.status,
             'parameters': item.parameters, 'sample_size': item.sample_size,
-            'snapshot_id': item.last_observation_id, 'created_at': timestamp(item.created_at),
+            'snapshot_id': item.last_observation_id,
+            'correction_count': len(item.correction_snapshot or []),
+            'created_at': timestamp(item.created_at),
             'finished_at': timestamp(item.finished_at), 'review': review_view(review), 'error': item.error}
     if include_result:
         view['result'] = item.result
@@ -18,6 +20,13 @@ def run_view(item, review=None, *, include_result=False):
 
 def observation_view(item):
     return {'id': item.id, 'data': item.payload, 'created_at': timestamp(item.created_at)}
+
+
+def correction_view(item):
+    return {'id': item.id, 'trial': item.trial, 'basis': item.basis, 'corrected': item.corrected,
+            'status': item.status, 'created_by': item.created_by, 'verified_by': item.verified_by,
+            'note': item.note, 'created_at': timestamp(item.created_at),
+            'verified_at': timestamp(item.verified_at)}
 
 
 def schedule_view(item):

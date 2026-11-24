@@ -1,7 +1,5 @@
 import csv
-import hashlib
 import io
-import json
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +9,7 @@ from src.domain import analysis
 from src.models.workflow import AuditEvent, Observation
 from src.services.errors import BusinessError
 from src.services.validation import validated
+from src.utils.keys import content_key
 
 
 MAX_OBSERVATIONS = 5000
@@ -24,10 +23,6 @@ def clean_observation(raw):
     except ValueError as exc:
         raise BusinessError(str(exc)) from exc
     return row
-
-
-def content_key(row):
-    return 'data:' + hashlib.sha256(json.dumps(row, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 def parse_csv(raw):

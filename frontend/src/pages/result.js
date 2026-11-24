@@ -7,6 +7,26 @@ import { bindDownloads, bindForm, notify } from '../hooks/actions.js';
 import { esc, formatMetric, timeLabel } from '../utils/html.js';
 import { runTable } from './analysis.js';
 
+function robustnessPanel(data) {
+  const robustness = data.robustness;
+  if (!robustness) return '';
+  const retest = robustness.retest_trials || [];
+  const banner = retest.length
+    ? `<div class="empty retest-alert" role="alert"><b>建议先复测再签核：</b>${esc(retest.join('、'))}
+         <p>${esc(robustness.note)}</p>
+         <small>依据相同却互相冲突的更正会让推荐在 ${esc((robustness.possible_winners || []).join('、') || '不同组合')} 之间变化。</small></div>`
+    : `<div class="empty robust-ok"><b>比选推荐稳健</b><p>${esc(robustness.note)}</p>
+         ${robustness.ambiguous_trials?.length ? `<small>待核实试片 ${esc(robustness.ambiguous_trials.join('、'))} 的每种可能读数都选出同一组合，共核对 ${esc(robustness.scenario_count)} 种读数组合。</small>` : ''}</div>`;
+  const detailRows = robustness.details || [];
+  const detail = detailRows.length ? table([
+    {label:'待核实试片', key:'trial'},
+    {label:'可能的更正读数', html: row => row.candidates.map(candidate =>
+      `翘边 ${candidate.warp ?? '—'}／耗电 ${candidate.energy ?? '—'}`).map(esc).join('<br>')},
+    {label:'各读数下的推荐', html: row => esc(row.winners.join('、'))},
+  ], detailRows) : '';
+  return `<section class="panel"><div class="panel-heading"><h2>冲突更正与复测提示</h2></div><div class="panel-body">${banner}${detail}</div></section>`;
+}
+
 export async function resultPage(spec, user, route) {
   if (!route.id) {
     const runs = await get('/runs');
@@ -15,7 +35,8 @@ export async function resultPage(spec, user, route) {
   const id = Number(route.id);
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('分析编号无效');
   const run = await get(`/runs/${id}`);
-  const head = intro(run.title, `${run.sample_size} 条观测 · 快照末号 ${run.snapshot_id} · ${timeLabel(run.created_at)}`, status(run));
+  const correctionNote = run.correction_count ? ` · 冻结更正 ${run.correction_count} 条` : '';
+  const head = intro(run.title, `${run.sample_size} 条观测 · 快照末号 ${run.snapshot_id}${correctionNote} · ${timeLabel(run.created_at)}`, status(run));
   if (run.status === RunStatus.QUEUED) return `${head}<div class="empty" data-pending="${id}">分析任务已入队，正在等待计算。此页会自动刷新。</div>`;
   if (run.status === RunStatus.FAILED) return `${head}<div class="empty" role="alert">${esc(run.error)} <a href="#analysis">调整条件并重新计算</a></div>`;
   const data = run.result;
@@ -24,6 +45,7 @@ export async function resultPage(spec, user, route) {
   if (!run.review && user.role === Role.SUPERVISOR) review = `<form id="review-form" data-id="${id}"><label class="field"><span>复核结论</span><select name="decision"><option value="approved">签核通过</option><option value="returned">退回补充</option></select></label><label class="field"><span>复核依据</span><textarea name="note" required minlength="2" maxlength="1000" placeholder="${esc(spec.decision_prompt)}"></textarea></label>${formError}<button class="primary">保存复核</button></form>`;
   const parameters = spec.parameters.map(field => `<li><span>${esc(field.label)}</span><b>${esc(run.parameters[field.key])}</b></li>`).join('');
   return `${head}<div class="split result-summary"><section class="conclusion"><h2>${esc(data.headline)}</h2><p>${esc(data.summary)}</p>${data.metrics.length ? `<dl class="metrics">${data.metrics.map(metric => `<div><dt>${esc(metric.label)}</dt><dd>${esc(formatMetric(metric.value))}${metric.unit ? `<small> ${esc(metric.unit)}</small>` : ''}</dd></div>`).join('')}</dl>` : ''}</section><aside class="method"><h2>本次条件</h2><ul class="parameters">${parameters}</ul>${bars(data.chart)}</aside></div>
+    ${robustnessPanel(data)}
     <section class="panel"><div class="panel-heading"><h2>计算明细</h2><button data-download="/runs/${id}/export">下载 CSV</button></div>${table(data.columns,data.rows,'当前参数下无明细，计算结论保留。')}</section>
     <section class="panel"><div class="panel-heading"><h2>业务签核</h2>${run.review?.decision === Decision.APPROVED ? '<a href="#reports">查看分发 →</a>' : ''}</div><div class="panel-body">${review}</div></section>`;
 }

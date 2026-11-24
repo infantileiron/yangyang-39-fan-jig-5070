@@ -16,3 +16,9 @@ class RunStatus(StrEnum):
 class Decision(StrEnum):
     APPROVED = 'approved'
     RETURNED = 'returned'
+
+
+class CorrectionStatus(StrEnum):
+    PENDING = 'pending'
+    VERIFIED = 'verified'
+    SUPERSEDED = 'superseded'

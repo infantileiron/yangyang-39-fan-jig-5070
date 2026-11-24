@@ -34,6 +34,23 @@ class ReviewInput(BaseModel):
         return value.strip()
 
 
+class CorrectionInput(BaseModel):
+    trial: str = Field(min_length=1, max=60)
+    basis: dict
+    corrected: dict
+
+    @field_validator('trial')
+    @classmethod
+    def meaningful_trial(cls, value):
+        if not value.strip():
+            raise ValueError('请填写扇面试片号')
+        return value.strip()
+
+
+class CorrectionVerify(BaseModel):
+    note: str = Field(default='', max_length=1000)
+
+
 class ScheduleInput(BaseModel):
     run_id: int = Field(gt=0)
     recipient: str = Field(min_length=2, max_length=100)

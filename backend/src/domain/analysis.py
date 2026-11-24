@@ -16,12 +16,39 @@ def validate(row):
         raise ValueError("风档和夹具必须是预注册四格之一")
 
 
-def analyze(rows, parameters):
+def cell_label(cell):
+    return f"{cell[0]}·{cell[1]}"
+
+
+def cell_means(rows):
+    groups = defaultdict(list)
+    for row in rows:
+        groups[(row["speed"], row["jig"])].append(row)
+    warps = [mean(row["warp"] for row in groups[cell]) for cell in CELLS]
+    energies = [mean(row["energy"] for row in groups[cell]) for cell in CELLS]
+    sizes = [len(groups[cell]) for cell in CELLS]
+    return groups, warps, energies, sizes
+
+
+def eligible_choices(rows, energy_limit):
+    """通过能耗护栏的组合，按平均翘边从小到大排序，返回 (翘边, 组合名, 平均耗电)。"""
+    _groups, warps, energies, _sizes = cell_means(rows)
+    return sorted((warp, cell_label(cell), energy)
+                  for cell, warp, energy in zip(CELLS, warps, energies) if energy <= energy_limit)
+
+
+def analyze(rows, parameters, correction_snapshot=None):
+    # 延迟导入避免与 corrections 模块的循环依赖
+    from src.domain.corrections import resolve_observations, robust_review
+
     energy_limit = parameters.get("energy_limit",15)
     alpha = parameters.get("alpha",0.05)
+    correction_snapshot = correction_snapshot or []
+    resolved = resolve_observations(rows, correction_snapshot)
+
     groups = defaultdict(list)
     seen = set()
-    for row in rows:
+    for row in resolved:
         validate(row)
         if row["trial"] in seen:
             raise ValueError(f"试片 {row['trial']} 有多条完工记录")
@@ -34,7 +61,7 @@ def analyze(rows, parameters):
     warps = [mean(row["warp"] for row in groups[cell]) for cell in CELLS]
     energies = [mean(row["energy"] for row in groups[cell]) for cell in CELLS]
     n = sizes[0]
-    residual_df = len(rows)-4
+    residual_df = len(resolved)-4
     sse = sum((row["warp"]-warp)**2 for cell,warp in zip(CELLS,warps) for row in groups[cell])
     mse = sse/residual_df
     speed = ((warps[2]+warps[3])-(warps[0]+warps[1]))/2
@@ -54,17 +81,22 @@ def analyze(rows, parameters):
             explanation = "越过显著线" if p <= alpha else "未越过显著线"
         table.append(dict(label=label,effect=round(effect,4),statistic=round(statistic,6) if statistic is not None else None,
                           p=round(p,8) if p is not None else None,decision=explanation))
-    choices = [(warp, cell[0]+"·"+cell[1]) for cell,warp,energy in zip(CELLS,warps,energies) if energy <= energy_limit]
+    choices = eligible_choices(resolved, energy_limit)
     if balanced and choices:
-        title = f"{min(choices)[1]} 进入下批试制复核"
+        title = f"{choices[0][1]} 进入下批试制复核"
     elif balanced:
         title = "四个组合都超过平均能耗护栏"
     else:
         title = "需补齐四格试片后再签核"
-    return report(title,
+    result = report(title,
                   f"能耗护栏为每片 {energy_limit:g} Wh，交互差为 {interaction:+.2f} mm。交互显著时按风档解释夹具效果。",
-                  [("完成试片",len(rows),"片"),("护栏内组合",len(choices),"组"),("交互差",round(interaction,3),"mm")],
+                  [("完成试片",len(resolved),"片"),("护栏内组合",len(choices),"组"),("交互差",round(interaction,3),"mm")],
                   COLUMNS,table,"组合平均翘边",chart,"mm")
+    result["robustness"] = robust_review(resolved, correction_snapshot, parameters) if balanced else {
+        "robust": True, "ambiguous_trials": [], "scenario_count": 1, "retest_trials": [],
+        "note": "四格不平衡，先补齐试片；待核实更正已随快照保留。"}
+    result["correction_count"] = len(correction_snapshot)
+    return result
 
 
 def seed():
