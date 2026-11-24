@@ -1,0 +1,73 @@
+{
+  "organization": "蒲匣团扇定型组",
+  "tagline": "先确认夹具在各风档的效果，再核对能耗",
+  "source": "同一批团扇试片的随机工位表、翘边测量和电表抄录",
+  "record_name": "团扇烘定试片",
+  "algorithm": "平衡 2×2 双因子 ANOVA 与能耗筛选",
+  "formula": "用四个格均值计算风档主差、夹具主差、差中差互动；平衡且每格 n 个试片时，主效应 SS=nD²，交互 SS=nI²/4；用组内残差平方和估计 MSE 并进入 F 检验。合格格按平均翘边最小排序，受平均能耗护栏限制。",
+  "decision_prompt": "哪组风档夹具值得留作下批试制，现有记录是否支持交互作用？",
+  "fields": [
+    {
+      "key": "trial",
+      "label": "扇面试片号",
+      "example": "PX-X07",
+      "type": "text"
+    },
+    {
+      "key": "speed",
+      "label": "试验风档",
+      "example": "高风",
+      "type": "choice",
+      "choices": [
+        "低风",
+        "高风"
+      ]
+    },
+    {
+      "key": "jig",
+      "label": "定型夹具",
+      "example": "弧边夹",
+      "type": "choice",
+      "choices": [
+        "直边夹",
+        "弧边夹"
+      ]
+    },
+    {
+      "key": "warp",
+      "label": "边缘最大翘边（mm）",
+      "example": 1.8,
+      "type": "number",
+      "min": 0,
+      "max": 40
+    },
+    {
+      "key": "energy",
+      "label": "单片定型能耗（Wh）",
+      "example": 13.2,
+      "type": "number",
+      "min": 0.1,
+      "max": 500
+    }
+  ],
+  "parameters": [
+    {
+      "key": "energy_limit",
+      "label": "平均能耗上限（Wh）",
+      "type": "number",
+      "min": 0.1,
+      "max": 500,
+      "default": 15,
+      "help": "排除平均能耗过线的组合。"
+    },
+    {
+      "key": "alpha",
+      "label": "交互检验显著水平",
+      "type": "number",
+      "min": 0.001,
+      "max": 0.25,
+      "default": 0.05,
+      "help": "主效应 p 值作解释，组合仍需满足能耗护栏。"
+    }
+  ]
+}
